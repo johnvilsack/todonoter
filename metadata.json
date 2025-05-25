@@ -1,0 +1,6 @@
+{
+  "name": "Task & Notes Organizer",
+  "description": "A web application for lightweight task management and note-taking. Data is stored locally in your browser. Full Google Account and Drive integration is a conceptual feature not implemented in this version.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
