@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task & Notes Organizer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      /* Exclusive Dark Theme (Dark Purple/Magenta - Overhauled) */
+      --bg-color: 26 23 40; /* Very, very dark desaturated purple */
+      --app-bar-bg-color: 49 46 69; /* Dark, slightly desaturated purple */
+      --app-bar-text-color: 229 226 237;
+      --card-bg-color: 36 32 55; /* Dark purple, distinct from bg */
+      --text-primary: 235 232 245; /* Light lavender */
+      --text-secondary: 188 182 213; /* Medium lavender */
+      --text-placeholder: 138 132 163;
+      --border-color: 59 55 80; /* Darker border */
+      --divider-color: 59 55 80;
+      --accent-color: 167 139 250; /* Brighter Violet */
+      --accent-color-hover: 139 92 246; /* Original Violet */
+      --accent-text-color: 255 255 255;
+      --highlight-color: 236 72 153; /* Brighter Magenta */
+      --highlight-color-hover: 219 39 119;
+      --completed-accent-color: 52 211 153;
+      --completed-text-color: 156 163 175;
+      --input-bg-color: 31 27 48; /* Darker input background */
+      --input-border-color: 79 70 115; /* Visible but not too bright border */
+      --button-secondary-bg-color: 69 63 96; /* Darker secondary button bg */
+      --button-secondary-text-color: 209 205 222;
+      --destructive-color: 239 68 68; /* Red-500 */
+      --destructive-color-hover: 220 38 38; /* Red-600 */
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: rgb(var(--bg-color));
+      color: rgb(var(--text-primary));
+      padding-top: 4rem; /* Space for fixed AppBar */
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background-color: rgba(var(--text-secondary), 0.4);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(var(--text-secondary), 0.6);
+    }
+    ::-webkit-scrollbar-track {
+      background-color: transparent;
+    }
+    
+    .drag-handle {
+      cursor: grab;
+    }
+    body.is-grabbing, body.is-grabbing * {
+      cursor: grabbing !important;
+    }
+    .dragging-item {
+      opacity: 0.6;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.2) !important;
+      transform: scale(1.02);
+    }
+    .drag-over-target-indicator {
+      border-top: 3px solid rgb(var(--accent-color)) !important; 
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(var(--bg-color), 0.7); 
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      -webkit-backdrop-filter: blur(5px);
+      backdrop-filter: blur(5px);
+    }
+    .modal-content {
+      background-color: rgb(var(--card-bg-color));
+      padding: 20px; 
+      border-radius: 8px; 
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3), 0 5px 10px rgba(0,0,0,0.2);
+      width: 90%;
+      max-width: 500px;
+      max-height: 90vh;
+      display: flex; 
+      flex-direction: column;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/"
+  }
+}
+</script>
+</head>
+<body class="antialiased text-base">
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html><link rel="stylesheet" href="index.css">
+<script src="index.tsx" type="module"></script>
