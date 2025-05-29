@@ -15,6 +15,7 @@ import ConfirmDeleteModal from './components/ConfirmDeleteModal';
 import CompletionNotesModal from './components/CompletionNotesModal';
 import ConfirmArchiveModal from './components/ConfirmArchiveModal'; 
 import ExportOptionsModal from './components/ExportOptionsModal';
+import ImportDataModal from './components/ImportDataModal'; // New import
 
 type ViewMode = 'main' | 'completed' | 'archived';
 
@@ -39,6 +40,7 @@ const App: React.FC = () => {
   const [itemToArchive, setItemToArchive] = useState<Entry | null>(null); 
 
   const [isExportOptionsModalOpen, setIsExportOptionsModalOpen] = useState(false);
+  const [isImportDataModalOpen, setIsImportDataModalOpen] = useState(false); // New state for import modal
 
   const handleOpenDetailModal = (entry: Entry) => {
     setSelectedEntryForDetail(entry);
@@ -281,6 +283,15 @@ const App: React.FC = () => {
   const closeExportOptionsModal = useCallback(() => {
     setIsExportOptionsModalOpen(false);
   }, []);
+  
+  const openImportDataModal = useCallback(() => {
+    setIsImportDataModalOpen(true);
+  }, []);
+
+  const closeImportDataModal = useCallback(() => {
+    setIsImportDataModalOpen(false);
+  }, []);
+
 
   const triggerDownload = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -319,16 +330,17 @@ const App: React.FC = () => {
     return stringField;
   };
 
-  const convertToCSV = (data: Entry[]): string => {
-    if (!data || data.length === 0) return '';
-    const headers: (keyof Entry)[] = [
+  const CSV_HEADERS: (keyof Entry)[] = [
       'id', 'title', 'details', 'type', 'createdAt', 'isCompleted', 'completedAt',
       'completionNotes', 'dueDate', 'contact', 'url', 'isArchived', 'archivedAt'
-    ];
+  ];
+
+  const convertToCSV = (data: Entry[]): string => {
+    if (!data || data.length === 0) return '';
     const csvRows = [
-      headers.join(','), 
+      CSV_HEADERS.join(','), 
       ...data.map(entry =>
-        headers.map(headerKey =>
+        CSV_HEADERS.map(headerKey =>
           escapeCSVField(entry[headerKey])
         ).join(',')
       )
@@ -343,6 +355,145 @@ const App: React.FC = () => {
     triggerDownload(blob, getTimestampedFilename('task-notes-organizer-export', 'csv'));
     closeExportOptionsModal();
   }, [entries, closeExportOptionsModal]);
+
+  const parseCSVLine = (line: string): string[] => {
+    const fields: string[] = [];
+    let currentField = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            if (inQuotes && i + 1 < line.length && line[i+1] === '"') { // Escaped quote " -> ""
+                currentField += '"';
+                i++; 
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            fields.push(currentField);
+            currentField = '';
+        } else {
+            currentField += char;
+        }
+    }
+    fields.push(currentField);
+    return fields;
+  };
+
+  const parseImportedCSV = (csvString: string): Entry[] | null => {
+    try {
+      const lines = csvString.split(/\r?\n/);
+      if (lines.length < 2) return null; // Must have header + at least one data row
+
+      const headerLine = lines.shift()!;
+      const parsedHeaders = parseCSVLine(headerLine).map(h => h.trim());
+      
+      // Validate headers
+      const expectedHeadersSet = new Set(CSV_HEADERS);
+      if (parsedHeaders.length !== CSV_HEADERS.length || !parsedHeaders.every(h => expectedHeadersSet.has(h as keyof Entry))) {
+        console.error("CSV headers do not match expected headers.", parsedHeaders, CSV_HEADERS);
+        return null;
+      }
+
+      const importedEntries: Entry[] = [];
+      for (const line of lines) {
+        if (line.trim() === '') continue; // Skip empty lines
+        const values = parseCSVLine(line);
+        if (values.length !== parsedHeaders.length) {
+          console.warn("Skipping CSV line due to incorrect number of fields:", line);
+          continue;
+        }
+
+        const entry: Partial<Entry> = {};
+        parsedHeaders.forEach((header, index) => {
+          const key = header as keyof Entry;
+          const value = values[index];
+
+          if (value === '' || value === null || typeof value === 'undefined') {
+            entry[key] = undefined;
+            return;
+          }
+
+          switch (key) {
+            case 'isCompleted':
+            case 'isArchived':
+              entry[key] = value.toLowerCase() === 'true';
+              break;
+            case 'type':
+              entry[key] = value === 'TASK' ? EntryType.Task : (value === 'NOTE' ? EntryType.Note : undefined);
+              if (entry[key] === undefined) throw new Error(`Invalid entry type: ${value}`);
+              break;
+            default:
+              entry[key] = value;
+          }
+        });
+        
+        // Basic validation for required fields
+        if (!entry.id || !entry.title || !entry.type || !entry.createdAt || typeof entry.isCompleted === 'undefined') {
+            console.warn("Skipping entry due to missing required fields:", entry);
+            continue;
+        }
+        importedEntries.push(entry as Entry);
+      }
+      return importedEntries;
+    } catch (error) {
+      console.error("Error parsing CSV:", error);
+      return null;
+    }
+  };
+  
+  const parseImportedJSON = (jsonString: string): Entry[] | null => {
+    try {
+      const data = JSON.parse(jsonString);
+      if (!Array.isArray(data)) return null;
+      
+      // Validate each entry (basic check)
+      const importedEntries: Entry[] = data.filter(item => 
+        item && typeof item.id === 'string' && typeof item.title === 'string' &&
+        typeof item.type === 'string' && (item.type === EntryType.Task || item.type === EntryType.Note) &&
+        typeof item.createdAt === 'string' && typeof item.isCompleted === 'boolean'
+      );
+      if(importedEntries.length !== data.length) {
+          console.warn("Some entries in JSON were invalid and have been filtered out.");
+      }
+      return importedEntries;
+    } catch (error) {
+      console.error("Error parsing JSON:", error);
+      return null;
+    }
+  };
+
+  const handleImportData = useCallback(async (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const content = event.target?.result as string;
+      let importedData: Entry[] | null = null;
+
+      if (file.name.endsWith('.json')) {
+        importedData = parseImportedJSON(content);
+      } else if (file.name.endsWith('.csv')) {
+        importedData = parseImportedCSV(content);
+      } else {
+        alert("Unsupported file type. Please select a JSON or CSV file.");
+        return;
+      }
+
+      if (importedData) {
+        setEntries(importedData);
+        alert(`Data imported successfully. ${importedData.length} entries loaded.`);
+        setActiveTab(TabView.ActiveTasks); // Reset view
+        setViewMode('main');
+      } else {
+        alert("Import failed. Invalid file format or corrupted data. Please check the console for more details.");
+      }
+      closeImportDataModal();
+    };
+    reader.onerror = () => {
+        alert("Failed to read the file.");
+        closeImportDataModal();
+    };
+    reader.readAsText(file);
+  }, [setEntries, closeImportDataModal]);
 
 
   const activeTasks = useMemo(() => entries.filter(entry => entry.type === EntryType.Task && !entry.isCompleted), [entries]);
@@ -411,10 +562,22 @@ const App: React.FC = () => {
                   {renderCurrentTabView()}
                 </div>
                 {completedTasks.length > 0 && (
-                  <button onClick={() => setViewMode('completed')} className={`${mainViewButtonClass} rounded-b-lg`}>View Completed Tasks</button>
+                  <button 
+                    type="button"
+                    onClick={() => setViewMode('completed')} 
+                    className={`${mainViewButtonClass} ${archivedNotes.length > 0 ? '' : 'rounded-b-lg'}`}
+                  >
+                    View Completed Tasks
+                  </button>
                 )}
                 {archivedNotes.length > 0 && (
-                  <button onClick={() => setViewMode('archived')} className={`${mainViewButtonClass} ${completedTasks.length === 0 ? 'rounded-b-lg' : 'rounded-none border-t'}`}>View Archived Notes</button>
+                  <button 
+                    type="button"
+                    onClick={() => setViewMode('archived')} 
+                    className={`${mainViewButtonClass} rounded-b-lg`}
+                  >
+                    View Archived Notes
+                  </button>
                 )}
               </div>
             </>
@@ -442,7 +605,10 @@ const App: React.FC = () => {
       </main>
       
       <footer className="bg-[rgb(var(--bg-color))] border-t border-[rgb(var(--divider-color))] p-3 text-xs text-center text-[rgb(var(--text-secondary))] mt-8">
-         <button onClick={openExportOptionsModal} className={`${footerButtonClass} !text-xs`}>Export All Data</button>
+         <div className="flex justify-center space-x-3">
+            <button onClick={openImportDataModal} className={`${footerButtonClass} !text-xs`}>Import Data</button>
+            <button onClick={openExportOptionsModal} className={`${footerButtonClass} !text-xs`}>Export All Data</button>
+         </div>
          <p className="mt-1.5 opacity-75">&copy; 2025 John Vilsack</p>
       </footer>
 
@@ -496,6 +662,13 @@ const App: React.FC = () => {
           onClose={closeExportOptionsModal}
           onExportJSON={handleExportJSON}
           onExportCSV={handleExportCSV}
+        />
+      )}
+      {isImportDataModalOpen && ( // New Modal Render
+        <ImportDataModal
+          isOpen={isImportDataModalOpen}
+          onClose={closeImportDataModal}
+          onImport={handleImportData}
         />
       )}
     </div>
